@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
+import 'package:inqvine_core_ui/inqvine_core_ui.dart';
 import 'package:simple_icons/simple_icons.dart';
+import 'package:whatsapp_ai/main.dart';
 import 'package:whatsapp_ai/models/models.dart';
-import 'package:whatsapp_ai/views/home.dart';
 import 'package:yaru/yaru.dart';
 import 'package:yaru_icons/yaru_icons.dart';
-import 'package:yaru_widgets/yaru_widgets.dart';
 
-class MessageTile extends StatelessWidget {
+class MessageTile extends StatelessWidget with AppServicesMixin {
   const MessageTile({
     required this.message,
     required this.onMessageResponseRequested,
@@ -42,47 +41,83 @@ class MessageTile extends StatelessWidget {
       );
     }
 
-    final MediaQueryData mediaQuery = MediaQuery.of(context);
-    final bool isLargeScreen = mediaQuery.size.width > HomeViewState.kWidthBreakpoint;
+    Chat? selectedChat;
+    if (whatsappService.selectedChatId.isNotEmpty) {
+      selectedChat = whatsappService.messages.keys.firstWhere((chat) => chat.id == whatsappService.selectedChatId);
+    }
 
-    final Widget trailing = Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: <Widget>[
-        Text(DateTime.fromMillisecondsSinceEpoch(message.timestamp * 1000).toIso8601String()),
-        if (!message.fromMe) ...<Widget>[
-          const Text(
-            'Tap to reply',
-            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900),
-          ),
-        ],
-      ],
-    );
-
-    return YaruMasterTile(
-      selected: message.fromMe,
+    return InqvineTapHandler(
       onTap: () => onMessageResponseRequested(message),
-      leading: CircleAvatar(
-        child: message.fromMe
-            ? const Icon(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: Row(
+          children: <Widget>[
+            if (message.fromMe) ...<Widget>[
+              const Icon(
                 YaruIcons.user,
                 size: 24,
-              )
-            : const Icon(
+              ),
+            ] else if (selectedChat?.chatPic?.isNotEmpty ?? false) ...<Widget>[
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(100),
+                  child: Image.network(
+                    selectedChat?.chatPic ?? '',
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              ),
+            ] else ...<Widget>[
+              const Icon(
                 SimpleIcons.whatsapp,
                 size: 24,
               ),
-      ),
-      title: RichText(
-        text: TextSpan(
-          children: titleTextSpans,
+            ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  RichText(
+                    text: TextSpan(
+                      children: titleTextSpans,
+                    ),
+                  ),
+                  Text(
+                    message.text.body,
+                    maxLines: 2,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: <Widget>[
+                Text(DateTime.fromMillisecondsSinceEpoch(message.timestamp * 1000).toIso8601String()),
+                if (isQuoted) ...<Widget>[
+                  const Icon(
+                    YaruIcons.reply,
+                    size: 24,
+                  ),
+                ],
+                if (!message.fromMe) ...<Widget>[
+                  const Text(
+                    'Tap to reply',
+                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900),
+                  ),
+                ],
+              ],
+            ),
+          ],
         ),
       ),
-      subtitle: Text(
-        message.text.body,
-        maxLines: 2,
-      ),
-      trailing: isLargeScreen ? trailing : null,
     );
   }
 }

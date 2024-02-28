@@ -11,7 +11,6 @@ import 'package:whatsapp_ai/events/whatsapp_status_updated_event.dart';
 import 'package:whatsapp_ai/events/whatsapp_typing_time_changed_event.dart';
 import 'package:whatsapp_ai/main.dart';
 import 'package:whatsapp_ai/models/models.dart';
-import 'package:whatsapp_ai/services/generative_ai_service.dart';
 import 'package:whatsapp_ai/services/system_service.dart';
 
 enum WhatsappServiceStatus {
@@ -27,6 +26,7 @@ enum WhatsappServiceStatus {
 abstract class AbstractWhatsappService with AppServicesMixin {
   Map<Chat, List<Message>> get messages;
   Map<Chat, DateTime> get lastFetchTimes;
+  Map<Chat, bool> get messageEndReached;
   DateTime? lastFetchTime;
 
   String get selectedChatId;
@@ -56,6 +56,7 @@ abstract class AbstractWhatsappService with AppServicesMixin {
 
   Future<void> loadConversations();
   Future<void> lookForNewMessagesFromAllConversations();
+  Future<void> loadMessagesForChat(Chat chat, {int offset = 0, int limit = 20});
 
   Future<void> appendMessages(List<Message> newMessages, {bool notifyOnNewMessages = true, bool autoReplyOnNewMessages = true});
   Future<void> updatePollingInterval(int newInterval);
@@ -71,6 +72,8 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
   static const String kWhatsappAutoReplyEnabledKey = 'whatsapp_auto_reply_enabled';
   static const String kWhatsappTypingTimeKey = 'whatsapp_typing_time';
 
+  static const int kWindowLength = 20;
+
   StreamSubscription<WhatsppPollingIntervalUpdatedEvent>? _pollingIntervalUpdatedEventSubscription;
 
   @override
@@ -78,6 +81,9 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
 
   @override
   Map<Chat, DateTime> lastFetchTimes = {};
+
+  @override
+  Map<Chat, bool> messageEndReached = {};
 
   DateTime? _lastFetchTime;
 
@@ -263,6 +269,44 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
   }
 
   @override
+  Future<void> loadMessagesForChat(Chat chat, {int offset = 0, int limit = 20}) async {
+    if (!isLoggedIn) {
+      throw Exception('Not logged in');
+    }
+
+    status = WhatsappServiceStatus.loggedInLoadingPreviousMessages;
+    if (di.isRegistered<AbstractSystemService>()) {
+      systemService.showInformationToast('Loading previous messages from WhatsApp...');
+    }
+
+    try {
+      final Response messageResponse = await whapiClient.get(
+        'messages/list/${chat.id}',
+        options: Options(headers: apiHeaders),
+        queryParameters: {
+          'offset': offset,
+          'limit': limit,
+        },
+      );
+
+      if (messageResponse.statusCode != 200) {
+        throw Exception('Failed to load messages');
+      }
+
+      final List<dynamic> messagesJson = (messageResponse.data as Map<String, Object?>).containsKey('messages') ? (messageResponse.data as Map<String, Object?>)['messages'] as List<dynamic> : [];
+      final List<Message> newMessages = messagesJson.map((messageJson) => Message.fromWhapiJson(messageJson)).toList();
+
+      // Check if we have reached the end of the messages
+      final bool endReached = newMessages.length < kWindowLength;
+      messageEndReached[chat] = endReached;
+
+      await appendMessages(newMessages, notifyOnNewMessages: false, autoReplyOnNewMessages: false);
+    } finally {
+      status = WhatsappServiceStatus.loggedInIdle;
+    }
+  }
+
+  @override
   Future<void> lookForNewMessagesFromAllConversations() async {
     if (!isLoggedIn) {
       throw Exception('Not logged in');
@@ -282,6 +326,10 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
       final response = await whapiClient.get(
         'messages/list',
         options: Options(headers: apiHeaders),
+        data: {
+          'time_from': lastFetchTime?.millisecondsSinceEpoch,
+          'time_to': DateTime.now().millisecondsSinceEpoch,
+        },
       );
 
       if (response.statusCode != 200) {
@@ -308,8 +356,6 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
 
     try {
       final Set<Message> actualNewMessages = {};
-      final bool isFirstLoad = messages.isEmpty;
-
       for (final message in newMessages) {
         final String chatId = message.chatId;
         if (chatId.isEmpty) {
