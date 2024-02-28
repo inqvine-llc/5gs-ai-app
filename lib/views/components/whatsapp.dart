@@ -190,7 +190,7 @@ class HomeWhatsappConfigurationState extends State<HomeWhatsappConfiguration> wi
               textAlign: TextAlign.center,
             ),
           ),
-        ] else if (widget._whatsappStatus == WhatsappServiceStatus.loggedInLoadingInitialMessages) ...<Widget>[
+        ] else if (widget._whatsappStatus == WhatsappServiceStatus.loggedInLoadingConversations) ...<Widget>[
           const Align(alignment: Alignment.center, child: YaruCircularProgressIndicator()),
         ] else ...<Widget>[
           if (!widget.parentalPaddingApplied) ...<Widget>[

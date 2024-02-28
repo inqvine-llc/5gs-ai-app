@@ -46,6 +46,8 @@ class MessageTile extends StatelessWidget with AppServicesMixin {
       selectedChat = whatsappService.messages.keys.firstWhere((chat) => chat.id == whatsappService.selectedChatId);
     }
 
+    final ThemeData theme = Theme.of(context);
+
     return InqvineTapHandler(
       onTap: () => onMessageResponseRequested(message),
       child: Container(
@@ -86,6 +88,7 @@ class MessageTile extends StatelessWidget with AppServicesMixin {
                   RichText(
                     text: TextSpan(
                       children: titleTextSpans,
+                      style: theme.textTheme.labelSmall,
                     ),
                   ),
                   Text(

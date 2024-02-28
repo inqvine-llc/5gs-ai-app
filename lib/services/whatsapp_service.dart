@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:cron/cron.dart';
-import 'package:dart_openai/dart_openai.dart';
 import 'package:dio/dio.dart';
 import 'package:whatsapp_ai/events/messages_updated_event.dart';
 import 'package:whatsapp_ai/events/whatsapp_auto_reply_changed_event.dart';
@@ -16,7 +15,7 @@ import 'package:whatsapp_ai/services/system_service.dart';
 enum WhatsappServiceStatus {
   loggedOut,
   loggedInIdle,
-  loggedInLoadingInitialMessages,
+  loggedInLoadingConversations,
   loggedInLoadingPreviousMessages,
   loggedInLoadingFirstMessages,
   loggedInLoadingNextMessages,
@@ -55,6 +54,7 @@ abstract class AbstractWhatsappService with AppServicesMixin {
   }
 
   Future<void> loadConversations();
+  Future<void> loadChatById(String chatId);
   Future<void> lookForNewMessagesFromAllConversations();
   Future<void> loadMessagesForChat(Chat chat, {int offset = 0, int limit = 20});
 
@@ -240,7 +240,7 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
     }
 
     final bool isInitialLoad = messages.isEmpty;
-    status = isInitialLoad ? WhatsappServiceStatus.loggedInLoadingInitialMessages : WhatsappServiceStatus.loggedInLoadingFirstMessages;
+    status = isInitialLoad ? WhatsappServiceStatus.loggedInLoadingConversations : WhatsappServiceStatus.loggedInLoadingFirstMessages;
 
     if (di.isRegistered<AbstractSystemService>()) {
       systemService.showInformationToast('Refreshing messages from WhatsApp...');
@@ -349,6 +349,34 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
   }
 
   @override
+  Future<void> loadChatById(String chatId) async {
+    if (!isLoggedIn) {
+      throw Exception('Not logged in');
+    }
+
+    try {
+      final response = await whapiClient.get(
+        'chats/$chatId',
+        options: Options(headers: apiHeaders),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception('Failed to load chat');
+      }
+
+      final Map<String, dynamic> chatJson = response.data as Map<String, dynamic>;
+      final Chat chat = Chat.fromJson(chatJson);
+      if (!messages.containsKey(chat)) {
+        messages[chat] = [];
+      }
+    } catch (e) {
+      if (di.isRegistered<AbstractSystemService>()) {
+        await systemService.showErrorToast('Failed to load chat: $e');
+      }
+    }
+  }
+
+  @override
   Future<void> appendMessages(List<Message> newMessages, {bool notifyOnNewMessages = true, bool autoReplyOnNewMessages = true}) async {
     if (!isLoggedIn) {
       throw Exception('Not logged in');
@@ -359,8 +387,7 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
       for (final message in newMessages) {
         final String chatId = message.chatId;
         if (chatId.isEmpty) {
-          //! TODO - Load the conversation from the API
-          continue;
+          await loadChatById(chatId);
         }
 
         final Chat? chat = messages.keys.any((element) => element.id == chatId) ? messages.keys.firstWhere((element) => element.id == chatId) : null;
