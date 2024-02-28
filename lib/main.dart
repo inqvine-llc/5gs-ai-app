@@ -1,22 +1,61 @@
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:cron/cron.dart';
 import 'package:dio/dio.dart';
 import 'package:event_bus/event_bus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:whatsapp_ai/services/gemini_service.dart';
+import 'package:universal_io/io.dart';
+import 'package:whatsapp_ai/events/theme_updated_event.dart';
+import 'package:whatsapp_ai/extensions/yaru_extensions.dart';
+import 'package:whatsapp_ai/services/generative_ai_service.dart';
 import 'package:whatsapp_ai/services/system_service.dart';
 import 'package:whatsapp_ai/services/whatsapp_service.dart';
-import 'package:whatsapp_ai/themes/themes.dart';
+import 'package:window_manager/window_manager.dart';
+import 'package:yaru/yaru.dart';
 
-import 'views/home_view.dart';
+import 'views/home.dart';
 
 final GetIt di = GetIt.instance;
 
 Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   await registerThirdPartyServices();
   await registerInternalServices();
+  await configureWindowManager();
+
   runApp(const App());
+}
+
+Future<void> configureWindowManager() async {
+  final bool isDesktop = Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
+  if (isDesktop) {
+    await windowManager.ensureInitialized();
+    const WindowOptions windowOptions = WindowOptions(
+      backgroundColor: Color(0xFF1E1E1E),
+      title: '\${INSERT_APP_NAME} - AI Bot Prototype',
+      center: true,
+      titleBarStyle: TitleBarStyle.hidden,
+      windowButtonVisibility: true,
+    );
+
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+  }
+
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarIconBrightness: Brightness.light,
+  ));
 }
 
 Future<void> registerThirdPartyServices() async {
@@ -30,14 +69,14 @@ Future<void> registerThirdPartyServices() async {
 }
 
 Future<void> registerInternalServices() async {
-  final AbstractGeminiService geminiService = GeminiService();
+  final AbstractGenerativeAIService generativeAIService = GenerativeAIService();
   final AbstractWhatsappService whatsappService = WhatsappService();
   final AbstractSystemService systemService = SystemService();
 
-  await geminiService.initialize();
+  await generativeAIService.initialize();
   await whatsappService.initialize();
 
-  di.registerSingleton<AbstractGeminiService>(geminiService);
+  di.registerSingleton<AbstractGenerativeAIService>(generativeAIService);
   di.registerSingleton<AbstractWhatsappService>(whatsappService);
   di.registerSingleton<AbstractSystemService>(systemService);
 }
@@ -49,24 +88,94 @@ mixin AppServicesMixin {
   SharedPreferences get sharedPreferences => di<SharedPreferences>();
 
   AbstractWhatsappService get whatsappService => di<AbstractWhatsappService>();
-  AbstractGeminiService get geminiService => di<AbstractGeminiService>();
+  AbstractGenerativeAIService get generativeAIService => di<AbstractGenerativeAIService>();
   AbstractSystemService get systemService => di<AbstractSystemService>();
 }
 
-class App extends StatelessWidget {
+class App extends StatefulWidget {
   const App({super.key});
 
   static GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
   @override
+  State<App> createState() => _AppState();
+}
+
+class _AppState extends State<App> with AppServicesMixin {
+  StreamSubscription<ThemeUpdatedEvent>? _themeUpdatedSubscription;
+
+  YaruVariant _yaruVariant = YaruVariant.xubuntuBlue;
+  YaruVariant get yaruVariant => _yaruVariant;
+  set yaruVariant(YaruVariant value) {
+    _yaruVariant = value;
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  bool _isDarkMode = false;
+  bool get isDarkMode => _isDarkMode;
+  set isDarkMode(bool value) {
+    _isDarkMode = value;
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback(onFirstFrameRendered);
+    setupListeners();
+  }
+
+  void setupListeners() {
+    _themeUpdatedSubscription = eventBus.on<ThemeUpdatedEvent>().listen(onThemeUpdated);
+  }
+
+  @override
+  void dispose() {
+    _themeUpdatedSubscription?.cancel();
+    super.dispose();
+  }
+
+  void onFirstFrameRendered(Duration timeStamp) {
+    _isDarkMode = systemService.isDarkMode;
+    _yaruVariant = systemService.yaruVariant.toYaruVariant();
+    setState(() {});
+  }
+
+  void onThemeUpdated(ThemeUpdatedEvent event) {
+    if (!mounted) return;
+
+    _isDarkMode = systemService.isDarkMode;
+    _yaruVariant = systemService.yaruVariant.toYaruVariant();
+    setState(() {});
+
+    systemService.showInformationToast('Theme updated to ${_yaruVariant.toYaruString()}');
+  }
+
+  @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      title: '\${INSERT_APP_NAME} - AI Bot Prototype',
       home: const HomeView(),
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
-      theme: Themes.lightTheme,
-      darkTheme: Themes.darkTheme,
-      navigatorKey: navigatorKey,
+      navigatorKey: App.navigatorKey,
+      builder: (context, child) {
+        return YaruTheme(
+          data: YaruThemeData(
+            useMaterial3: true,
+            variant: _yaruVariant,
+            themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
+          ),
+          child: child!,
+        );
+      },
+      scrollBehavior: const MaterialScrollBehavior().copyWith(
+        dragDevices: {PointerDeviceKind.mouse, PointerDeviceKind.touch, PointerDeviceKind.stylus, PointerDeviceKind.unknown},
+      ),
     );
   }
 }
