@@ -300,13 +300,6 @@ class HomeSettingsPage extends StatelessWidget with AppServicesMixin {
     required AbstractWhatsappService whatsappService,
   }) {
     return [
-      Align(
-        alignment: Alignment.centerLeft,
-        child: FilledButton(
-          onPressed: () => whatsappService.refreshMessages(),
-          child: const Text('Refresh WhatsApp Messages'),
-        ),
-      ),
       if (nextPollingTime != null) ...<Widget>[
         const SizedBox(height: 16),
         Container(

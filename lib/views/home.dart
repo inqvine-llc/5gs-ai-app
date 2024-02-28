@@ -9,6 +9,7 @@ import 'package:whatsapp_ai/events/response_content_updated_event.dart';
 import 'package:whatsapp_ai/events/response_guidance_updated_event.dart';
 import 'package:whatsapp_ai/events/messages_updated_event.dart';
 import 'package:whatsapp_ai/events/whatsapp_auto_reply_changed_event.dart';
+import 'package:whatsapp_ai/events/whatsapp_chat_selected_event.dart';
 import 'package:whatsapp_ai/events/whatsapp_polling_interval_updated_event.dart';
 import 'package:whatsapp_ai/events/whatsapp_status_updated_event.dart';
 import 'package:whatsapp_ai/events/whatsapp_typing_time_changed_event.dart';
@@ -39,6 +40,7 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
   StreamSubscription<WhatsppPollingIntervalUpdatedEvent>? _whatsappPollingIntervalUpdatedSubscription;
   StreamSubscription<WhatsappAutoReplyChangedEvent>? _whatsappAutoReplyChangedSubscription;
   StreamSubscription<WhatsappTypingTimeChangedEvent>? _whatsappTypingTimeChangedSubscription;
+  StreamSubscription<WhatsappChatSelectedEvent>? _whatsappChatSelectedSubscription;
   StreamSubscription<ResponseGuidanceUpdatedEvent>? _responseGuidanceUpdatedSubscription;
   StreamSubscription<ResponseContentUpdatedEvent>? _responseContentUpdatedSubscription;
   StreamSubscription<ModelUpdatedEvent>? _modelUpdatedSubscription;
@@ -117,6 +119,9 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
 
     await _whatsappTypingTimeChangedSubscription?.cancel();
     _whatsappTypingTimeChangedSubscription = eventBus.on<WhatsappTypingTimeChangedEvent>().listen(onWhatsappTypingTimeUpdated);
+
+    await _whatsappChatSelectedSubscription?.cancel();
+    _whatsappChatSelectedSubscription = eventBus.on<WhatsappChatSelectedEvent>().listen(onWhatsappChatSelected);
 
     await _whatsappAutoReplyChangedSubscription?.cancel();
     _whatsappAutoReplyChangedSubscription = eventBus.on<WhatsappAutoReplyChangedEvent>().listen(onWhatsappAutoReplyUpdated);
@@ -222,6 +227,11 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
     }
 
     systemService.showSuccessToast('Typing time updated to ${whatsappService.typingTime} seconds');
+    setState(() {});
+  }
+
+  void onWhatsappChatSelected(WhatsappChatSelectedEvent event) {
+    if (!mounted) return;
     setState(() {});
   }
 
@@ -379,13 +389,22 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
       return null;
     }
 
+    Widget? leading = hasExceededWidthBreakpoint
+        ? null
+        : YaruIconButton(
+            icon: const Icon(YaruIcons.menu),
+            onPressed: () => pageController.index = -1,
+          );
+
+    if (whatsappService.selectedChatId.isNotEmpty) {
+      leading = YaruIconButton(
+        icon: const Icon(YaruIcons.arrow_left),
+        onPressed: () => whatsappService.selectedChatId = '',
+      );
+    }
+
     return YaruWindowTitleBar(
-      leading: hasExceededWidthBreakpoint
-          ? null
-          : YaruIconButton(
-              icon: const Icon(YaruIcons.menu),
-              onPressed: () => pageController.index = -1,
-            ),
+      leading: leading,
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[

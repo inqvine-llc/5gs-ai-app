@@ -5,6 +5,7 @@ import 'package:dart_openai/dart_openai.dart';
 import 'package:dio/dio.dart';
 import 'package:whatsapp_ai/events/messages_updated_event.dart';
 import 'package:whatsapp_ai/events/whatsapp_auto_reply_changed_event.dart';
+import 'package:whatsapp_ai/events/whatsapp_chat_selected_event.dart';
 import 'package:whatsapp_ai/events/whatsapp_polling_interval_updated_event.dart';
 import 'package:whatsapp_ai/events/whatsapp_status_updated_event.dart';
 import 'package:whatsapp_ai/events/whatsapp_typing_time_changed_event.dart';
@@ -24,7 +25,12 @@ enum WhatsappServiceStatus {
 }
 
 abstract class AbstractWhatsappService with AppServicesMixin {
-  Map<String, List<Message>> get messages;
+  Map<Chat, List<Message>> get messages;
+  Map<Chat, DateTime> get lastFetchTimes;
+  DateTime? lastFetchTime;
+
+  String get selectedChatId;
+  set selectedChatId(String value);
 
   String get clientToken;
   bool get isLoggedIn => clientToken.isNotEmpty;
@@ -35,8 +41,6 @@ abstract class AbstractWhatsappService with AppServicesMixin {
   int get pollingInterval;
 
   int get typingTime;
-
-  DateTime? lastFetchTime;
   bool get autoReplyEnabled;
 
   Future<void> initialize();
@@ -50,8 +54,9 @@ abstract class AbstractWhatsappService with AppServicesMixin {
     eventBus.fire(MessagesUpdatedEvent());
   }
 
-  Future<void> refreshMessages();
-  Future<void> lookForNewMessages();
+  Future<void> loadConversations();
+  Future<void> lookForNewMessagesFromAllConversations();
+
   Future<void> appendMessages(List<Message> newMessages, {bool notifyOnNewMessages = true, bool autoReplyOnNewMessages = true});
   Future<void> updatePollingInterval(int newInterval);
 
@@ -69,7 +74,15 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
   StreamSubscription<WhatsppPollingIntervalUpdatedEvent>? _pollingIntervalUpdatedEventSubscription;
 
   @override
-  Map<String, List<Message>> messages = {};
+  Map<Chat, List<Message>> messages = {};
+
+  @override
+  Map<Chat, DateTime> lastFetchTimes = {};
+
+  DateTime? _lastFetchTime;
+
+  @override
+  DateTime? get lastFetchTime => _lastFetchTime;
 
   Map<String, String> get apiHeaders => {
         'Content-Type': 'application/json',
@@ -94,6 +107,20 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
 
   @override
   int get pollingInterval => _pollingInterval;
+
+  String _selectedChatId = '';
+
+  @override
+  String get selectedChatId => _selectedChatId;
+
+  set selectedChatId(String value) {
+    if (value == _selectedChatId) {
+      return;
+    }
+
+    _selectedChatId = value;
+    eventBus.fire(WhatsappChatSelectedEvent());
+  }
 
   ScheduledTask? _pollingTask;
 
@@ -169,7 +196,7 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
       return;
     }
 
-    await lookForNewMessages();
+    await lookForNewMessagesFromAllConversations();
   }
 
   @override
@@ -187,7 +214,7 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
     await sharedPreferences.setString(kWhatsappTokenKey, newToken);
 
     await clearMessages();
-    await refreshMessages();
+    await loadConversations();
   }
 
   @override
@@ -201,7 +228,7 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
   }
 
   @override
-  Future<void> refreshMessages() async {
+  Future<void> loadConversations() async {
     if (!isLoggedIn) {
       throw Exception('Not logged in');
     }
@@ -214,29 +241,29 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
     }
 
     try {
-      final response = await whapiClient.get(
-        'messages/list',
+      final Response chatResponse = await whapiClient.get(
+        'chats',
         options: Options(headers: apiHeaders),
       );
 
-      if (response.statusCode != 200) {
+      if (chatResponse.statusCode != 200) {
         throw Exception('Failed to load messages');
       }
 
-      final List<dynamic> messagesJson = (response.data as Map<String, Object?>).containsKey('messages') ? (response.data as Map<String, Object?>)['messages'] as List<dynamic> : [];
-      final List<Message> newMessages = [];
-      for (final messageJson in messagesJson) {
-        newMessages.add(Message.fromWhapiJson(messageJson));
+      final List<dynamic> chatsJson = (chatResponse.data as Map<String, Object?>).containsKey('chats') ? (chatResponse.data as Map<String, Object?>)['chats'] as List<dynamic> : [];
+      final List<Chat> newChats = chatsJson.map((chatJson) => Chat.fromJson(chatJson)).toList();
+      for (final chat in newChats) {
+        if (!messages.containsKey(chat)) {
+          messages[chat] = [];
+        }
       }
-
-      await appendMessages(newMessages, autoReplyOnNewMessages: false);
     } finally {
       status = WhatsappServiceStatus.loggedInIdle;
     }
   }
 
   @override
-  Future<void> lookForNewMessages() async {
+  Future<void> lookForNewMessagesFromAllConversations() async {
     if (!isLoggedIn) {
       throw Exception('Not logged in');
     }
@@ -284,16 +311,28 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
       final bool isFirstLoad = messages.isEmpty;
 
       for (final message in newMessages) {
-        final bool isNew = !messages.containsKey(message.chatId) || !messages[message.chatId]!.any((m) => m.id == message.id);
-        if (isNew) {
-          actualNewMessages.add(message);
+        final String chatId = message.chatId;
+        if (chatId.isEmpty) {
+          //! TODO - Load the conversation from the API
+          continue;
         }
 
-        messages.putIfAbsent(message.chatId, () => <Message>[]);
-        final bool exists = messages[message.chatId]!.any((m) => m.id == message.id);
-        if (!exists) {
-          messages[message.chatId]!.add(message);
+        final Chat? chat = messages.keys.any((element) => element.id == chatId) ? messages.keys.firstWhere((element) => element.id == chatId) : null;
+        if (chat == null) {
+          continue;
         }
+
+        messages[chat] ??= [];
+        final bool isNew = !(messages[chat]?.any((element) => element.id == message.id) ?? false);
+        if (isNew) {
+          actualNewMessages.add(message);
+          messages[chat]!.add(message);
+        } else {
+          final int index = messages[chat]!.indexWhere((element) => element.id == message.id);
+          messages[chat]![index] = message;
+        }
+
+        lastFetchTimes[chat] = DateTime.now();
       }
 
       // sort messages by timestamp
@@ -305,47 +344,48 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
         systemService.showInformationToast('New messages found: ${actualNewMessages.length}');
       }
 
-      if (autoReplyOnNewMessages && autoReplyEnabled) {
-        for (final message in actualNewMessages) {
-          if (message.fromMe) {
-            continue;
-          }
+      // UNCOMMENT FOR AUTO REPLIES
+      // if (autoReplyOnNewMessages && autoReplyEnabled) {
+      //   for (final message in actualNewMessages) {
+      //     if (message.fromMe) {
+      //       continue;
+      //     }
 
-          // Check if we have a reply for the message
-          final MessageQuotationData? replyData = MessageQuotationData.fromMessageContext(message.context);
-          bool hasReply = false;
-          if (replyData != null) {
-            final Message? replyMessage = messages[message.chatId]?.firstWhere((m) => m.id == replyData.quotedId, orElse: () => Message.empty());
-            final bool isReplyFromMe = replyMessage?.fromMe ?? false;
-            if (isReplyFromMe) {
-              hasReply = true;
-            }
-          }
+      //     // Check if we have a reply for the message
+      //     final MessageQuotationData? replyData = MessageQuotationData.fromMessageContext(message.context);
+      //     bool hasReply = false;
+      //     if (replyData != null) {
+      //       final Message? replyMessage = messages[message.chatId]?.firstWhere((m) => m.id == replyData.quotedId, orElse: () => Message.empty());
+      //       final bool isReplyFromMe = replyMessage?.fromMe ?? false;
+      //       if (isReplyFromMe) {
+      //         hasReply = true;
+      //       }
+      //     }
 
-          if (!isFirstLoad && !hasReply && di.isRegistered<AbstractGenerativeAIService>()) {
-            final Map<OpenAIChatMessageRole, Set<String>> content = <OpenAIChatMessageRole, Set<String>>{};
-            content[OpenAIChatMessageRole.system] = generativeAIService.defaultPromptGuidance;
-            content[OpenAIChatMessageRole.assistant] = generativeAIService.defaultPromptContent;
+      //     if (!isFirstLoad && !hasReply && di.isRegistered<AbstractGenerativeAIService>()) {
+      //       final Map<OpenAIChatMessageRole, Set<String>> content = <OpenAIChatMessageRole, Set<String>>{};
+      //       content[OpenAIChatMessageRole.system] = generativeAIService.defaultPromptGuidance;
+      //       content[OpenAIChatMessageRole.assistant] = generativeAIService.defaultPromptContent;
 
-            if (di.isRegistered<AbstractSystemService>()) {
-              await systemService.showInformationToast('Generating reply for message from ${message.fromName}...');
-            }
+      //       if (di.isRegistered<AbstractSystemService>()) {
+      //         await systemService.showInformationToast('Generating reply for message from ${message.fromName}...');
+      //       }
 
-            final String reply = await generativeAIService.generateReply(message, content);
-            if (reply.isNotEmpty) {
-              if (di.isRegistered<AbstractSystemService>()) {
-                await systemService.showSuccessToast('Sending reply ($reply) in $typingTime seconds...');
-              }
+      //       final String reply = await generativeAIService.generateReply(message, content);
+      //       if (reply.isNotEmpty) {
+      //         if (di.isRegistered<AbstractSystemService>()) {
+      //           await systemService.showSuccessToast('Sending reply ($reply) in $typingTime seconds...');
+      //         }
 
-              await replyMessage(message, reply);
-            } else {
-              if (di.isRegistered<AbstractSystemService>()) {
-                await systemService.showErrorToast('Failed to generate reply for message from ${message.from}');
-              }
-            }
-          }
-        }
-      }
+      //         await replyMessage(message, reply);
+      //       } else {
+      //         if (di.isRegistered<AbstractSystemService>()) {
+      //           await systemService.showErrorToast('Failed to generate reply for message from ${message.from}');
+      //         }
+      //       }
+      //     }
+      //   }
+      // }
 
       lastFetchTime = DateTime.now();
       eventBus.fire(MessagesUpdatedEvent());
