@@ -33,9 +33,6 @@ class HomeView extends StatefulWidget {
 
 class HomeViewState extends State<HomeView> with AppServicesMixin {
   WhatsappServiceStatus? whatsappStatus;
-  int whatsappPollingInterval = 5000;
-  int whatsappTypingTime = 3;
-  bool whatsappAutoReplyEnabled = false;
 
   StreamSubscription<MessagesUpdatedEvent>? _messagesUpdatedSubscription;
   StreamSubscription<WhatsappStatusUpdatedEvent>? _whatsappStatusSubscription;
@@ -45,16 +42,6 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
   StreamSubscription<ResponseGuidanceUpdatedEvent>? _responseGuidanceUpdatedSubscription;
   StreamSubscription<ResponseContentUpdatedEvent>? _responseContentUpdatedSubscription;
   StreamSubscription<ModelUpdatedEvent>? _modelUpdatedSubscription;
-
-  final Set<String> allPromptGuidance = {};
-  final Set<String> defaultPromptGuidance = {};
-
-  final Set<String> allPromptContent = {};
-  final Set<String> defaultPromptContent = {};
-
-  String defaultModel = '';
-  String openaiApiToken = '';
-  String whatApiToken = '';
 
   final int kPageCount = 4;
   late final YaruPageController pageController;
@@ -101,41 +88,25 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
 
   Future<void> onFirstRender(Duration timeStamp) async {
     whatsappStatus = whatsappService.status;
-    whatsappAutoReplyEnabled = whatsappService.autoReplyEnabled;
 
     pageController.index = currentPage;
 
-    whatsappTypingTime = whatsappService.typingTime;
-    if (whatsappTypingTime > 0) {
-      whatsappTypingTimeTextController.text = whatsappTypingTime.toString();
+    if (whatsappService.typingTime > 0) {
+      whatsappTypingTimeTextController.text = whatsappService.typingTime.toString();
     }
 
-    whatsappPollingInterval = whatsappService.pollingInterval;
-    if (whatsappPollingInterval > 0) {
-      whatsappIntervalTextController.text = whatsappPollingInterval.toString();
+    if (whatsappService.pollingInterval > 0) {
+      whatsappIntervalTextController.text = whatsappService.pollingInterval.toString();
     }
 
-    whatApiToken = whatsappService.clientToken;
-    if (whatApiToken.isNotEmpty) {
-      whapiApiTokenTextController.text = whatApiToken;
+    if (whatsappService.clientToken.isNotEmpty) {
+      whapiApiTokenTextController.text = whatsappService.clientToken;
     }
 
-    openaiApiToken = generativeAIService.apiKey;
-    if (openaiApiToken.isNotEmpty) {
-      openaiApiTokenTextController.text = openaiApiToken;
+    if (generativeAIService.apiKey.isNotEmpty) {
+      openaiApiTokenTextController.text = generativeAIService.apiKey;
     }
 
-    allPromptGuidance.clear();
-    allPromptGuidance.addAll(generativeAIService.allPromptGuidance);
-    allPromptContent.clear();
-    allPromptContent.addAll(generativeAIService.allPromptContent);
-
-    defaultPromptGuidance.clear();
-    defaultPromptGuidance.addAll(generativeAIService.defaultPromptGuidance);
-    defaultPromptContent.clear();
-    defaultPromptContent.addAll(generativeAIService.defaultPromptContent);
-
-    defaultModel = generativeAIService.defaultModel;
     setState(() {});
 
     await _messagesUpdatedSubscription?.cancel();
@@ -239,28 +210,25 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
   void onWhatsappPollingIntervalUpdated(WhatsppPollingIntervalUpdatedEvent event) {
     if (!mounted) return;
 
-    whatsappPollingInterval = whatsappService.pollingInterval;
-    systemService.showSuccessToast('Polling interval updated to $whatsappPollingInterval ms');
+    systemService.showSuccessToast('Polling interval updated to ${whatsappService.pollingInterval} ms');
     setState(() {});
   }
 
   void onWhatsappTypingTimeUpdated(WhatsappTypingTimeChangedEvent event) {
     if (!mounted) return;
 
-    whatsappTypingTime = whatsappService.typingTime;
-    if (whatsappTypingTime > 0) {
-      whatsappTypingTimeTextController.text = whatsappTypingTime.toString();
+    if (whatsappService.typingTime > 0) {
+      whatsappTypingTimeTextController.text = whatsappService.typingTime.toString();
     }
 
-    systemService.showSuccessToast('Typing time updated to $whatsappTypingTime seconds');
+    systemService.showSuccessToast('Typing time updated to ${whatsappService.typingTime} seconds');
     setState(() {});
   }
 
   void onWhatsappAutoReplyUpdated(WhatsappAutoReplyChangedEvent event) {
     if (!mounted) return;
 
-    whatsappAutoReplyEnabled = whatsappService.autoReplyEnabled;
-    systemService.showSuccessToast('Auto reply enabled: $whatsappAutoReplyEnabled');
+    systemService.showSuccessToast('Auto reply enabled: ${whatsappService.autoReplyEnabled}');
     setState(() {});
   }
 
@@ -268,9 +236,8 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
     if (!mounted) return;
 
     whatsappStatus = whatsappService.status;
-    whatApiToken = whatsappService.clientToken;
-    if (whatApiToken.isNotEmpty) {
-      whapiApiTokenTextController.text = whatApiToken;
+    if (whatsappService.clientToken.isNotEmpty) {
+      whapiApiTokenTextController.text = whatsappService.clientToken;
     }
 
     setState(() {});
@@ -278,33 +245,16 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
 
   Future<void> onResponseGuidanceUpdated(ResponseGuidanceUpdatedEvent event) async {
     if (!mounted) return;
-
-    allPromptGuidance.clear();
-    allPromptGuidance.addAll(generativeAIService.allPromptGuidance);
-
-    defaultPromptGuidance.clear();
-    defaultPromptGuidance.addAll(generativeAIService.defaultPromptGuidance);
-
     setState(() {});
   }
 
   Future<void> onResponseContentUpdated(ResponseContentUpdatedEvent event) async {
     if (!mounted) return;
-
-    allPromptContent.clear();
-    allPromptContent.addAll(generativeAIService.allPromptContent);
-
-    defaultPromptContent.clear();
-    defaultPromptContent.addAll(generativeAIService.defaultPromptContent);
-
     setState(() {});
   }
 
   Future<void> onModelUpdated(ModelUpdatedEvent event) async {
     if (!mounted) return;
-
-    defaultModel = generativeAIService.defaultModel;
-    systemService.showSuccessToast('Default model updated');
     setState(() {});
   }
 
@@ -328,8 +278,8 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
       }
 
       final Map<OpenAIChatMessageRole, Set<String>> content = <OpenAIChatMessageRole, Set<String>>{};
-      content[OpenAIChatMessageRole.system] = defaultPromptGuidance;
-      content[OpenAIChatMessageRole.assistant] = defaultPromptContent;
+      content[OpenAIChatMessageRole.system] = generativeAIService.defaultPromptGuidance;
+      content[OpenAIChatMessageRole.assistant] = generativeAIService.defaultPromptContent;
 
       final String response = await generativeAIService.generateReply(message, content);
 
@@ -477,10 +427,10 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
           parentalPaddingApplied: parentalPaddingApplied,
         ),
       1 => HomeAIConfigurationPage(
-          allPromptGuidance: allPromptGuidance,
-          defaultPromptGuidance: defaultPromptGuidance,
-          allPromptContent: allPromptContent,
-          defaultPromptContent: defaultPromptContent,
+          allPromptGuidance: generativeAIService.allPromptGuidance,
+          defaultPromptGuidance: generativeAIService.defaultPromptGuidance,
+          allPromptContent: generativeAIService.allPromptContent,
+          defaultPromptContent: generativeAIService.defaultPromptContent,
           promptGuidanceController: promptGuidanceController,
           promptContentController: promptContentController,
           onDefaultPromptContentSubmitted: onDefaultPromptContentSubmitted,
@@ -493,9 +443,9 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
         ),
       2 => Container(),
       3 => HomeSettingsPage(
-          whatApiToken: whatApiToken,
-          openaiApiToken: openaiApiToken,
-          defaultModel: defaultModel,
+          whatApiToken: whatsappService.clientToken,
+          openaiApiToken: generativeAIService.apiKey,
+          defaultModel: generativeAIService.defaultModel,
           whapiApiTokenTextController: whapiApiTokenTextController,
           onWhapiApiTokenSubmitted: onWhatsAppTokenSubmitted,
           whatsappIntervalTextController: whatsappIntervalTextController,
@@ -507,10 +457,10 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
           onDarkModeChangeRequested: onDarkModeChangeRequested,
           isDarkMode: systemService.isDarkMode,
           yaruVariant: systemService.yaruVariant.toYaruVariant(),
-          whatsappAutoReplyEnabled: whatsappAutoReplyEnabled,
+          whatsappAutoReplyEnabled: whatsappService.autoReplyEnabled,
           onWhatsappAutoReplyChangeRequested: onWhatsAppAutoReplyChangeRequested,
           onWhatsappTypingTimeChangeRequested: onWhatsappTypingTimeChangeRequested,
-          whatsappTypingTime: whatsappTypingTime,
+          whatsappTypingTime: whatsappService.typingTime,
           whatsappTypingTimeTextController: whatsappTypingTimeTextController,
           parentalPaddingApplied: parentalPaddingApplied,
         ),
