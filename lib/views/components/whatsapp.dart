@@ -1,7 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:inqvine_core_ui/inqvine_core_ui.dart';
+import 'package:paginated_list/paginated_list.dart';
 import 'package:whatsapp_ai/events/messages_updated_event.dart';
+import 'package:whatsapp_ai/events/whatsapp_chat_selected_event.dart';
 import 'package:whatsapp_ai/main.dart';
 import 'package:whatsapp_ai/models/models.dart';
 import 'package:whatsapp_ai/services/whatsapp_service.dart';
@@ -23,29 +26,19 @@ class HomeWhatsappConfiguration extends StatefulWidget {
   final bool parentalPaddingApplied;
 
   @override
-  State<HomeWhatsappConfiguration> createState() => _HomeWhatsappConfigurationState();
+  State<HomeWhatsappConfiguration> createState() => HomeWhatsappConfigurationState();
 }
 
-class _HomeWhatsappConfigurationState extends State<HomeWhatsappConfiguration> with TickerProviderStateMixin, AppServicesMixin {
-  String _selectedChatId = '';
-  String get selectedChatId => _selectedChatId;
-  set selectedChatId(String value) {
-    _selectedChatId = value;
-    if (mounted) {
-      setState(() {});
-    }
-  }
+class HomeWhatsappConfigurationState extends State<HomeWhatsappConfiguration> with TickerProviderStateMixin, AppServicesMixin {
+  static const double kTabBarAvatarSize = 52.0;
 
   StreamSubscription<MessagesUpdatedEvent>? _messagesUpdatedEventSubscription;
-
-  TabController? _tabController;
-  TabController? get tabController => _tabController;
+  StreamSubscription<WhatsappChatSelectedEvent>? _whatsappChatSelectedEventSubscription;
 
   @override
   void initState() {
     super.initState();
     setupListeners();
-    checkTabIntegrity();
   }
 
   @override
@@ -55,61 +48,139 @@ class _HomeWhatsappConfigurationState extends State<HomeWhatsappConfiguration> w
   }
 
   void setupListeners() {
-    _tabController = TabController(length: widget.whatsappService.messages.length, vsync: this);
     _messagesUpdatedEventSubscription = eventBus.on<MessagesUpdatedEvent>().listen(onMessagesUpdated);
+    _whatsappChatSelectedEventSubscription = eventBus.on<WhatsappChatSelectedEvent>().listen(onTabSelected);
   }
 
   void disposeListeners() {
-    _tabController?.dispose();
     _messagesUpdatedEventSubscription?.cancel();
+    _whatsappChatSelectedEventSubscription?.cancel();
   }
 
   void onMessagesUpdated(MessagesUpdatedEvent event) {
-    refreshTabController();
-    checkTabIntegrity();
-  }
-
-  // If the selected chat was deleted or null, and there are still chats available, select the first one
-  void checkTabIntegrity() {
-    if (widget.whatsappService.messages[selectedChatId] == null && widget.whatsappService.messages.isNotEmpty) {
-      selectedChatId = widget.whatsappService.messages.keys.first;
-    }
-
     if (mounted) {
       setState(() {});
     }
   }
 
-  void refreshTabController() {
-    _tabController = TabController(length: widget.whatsappService.messages.length, vsync: this);
+  void onTabSelected(WhatsappChatSelectedEvent index) {
     if (mounted) {
       setState(() {});
     }
   }
 
-  void onTabSelected(int index) {
-    selectedChatId = widget.whatsappService.messages.keys.elementAt(index);
+  void onTabChangeRequested(int index) {
+    final Chat chat = widget.whatsappService.messages.keys.elementAt(index);
+    whatsappService.selectedChatId = chat.id ?? '';
     if (mounted) {
       setState(() {});
     }
   }
 
-  Widget buildYaruTab(String key) {
-    final List<Message> messages = widget.whatsappService.messages[key] ?? [];
-    final String label = messages.firstWhere((element) => !element.fromMe && element.fromName.isNotEmpty, orElse: () => Message.empty()).fromName;
+  Widget buildChatConversationTile(Chat chat, int index) {
+    final ThemeData theme = Theme.of(context);
 
-    final bool isSelected = key == selectedChatId;
-    return YaruTab(label: isSelected ? '* $label *' : label);
+    return InqvineTapHandler(
+      onTap: () => onTabChangeRequested(index),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: whatsappService.selectedChatId == chat.id ? theme.primaryColor.withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: <Widget>[
+            if (chat.chatPicFull?.isNotEmpty ?? false) ...<Widget>[
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(kTabBarAvatarSize / 2),
+                  border: Border.all(color: theme.primaryColor, width: 2),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: CircleAvatar(
+                    radius: kTabBarAvatarSize / 2,
+                    backgroundImage: NetworkImage(chat.chatPicFull ?? ''),
+                  ),
+                ),
+              ),
+            ] else ...<Widget>[
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(kTabBarAvatarSize / 2),
+                  border: Border.all(color: theme.primaryColor, width: 2),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: CircleAvatar(
+                    radius: kTabBarAvatarSize / 2,
+                    child: Text(
+                      chat.name?.substring(0, 1) ?? '',
+                      style: theme.textTheme.titleLarge?.copyWith(color: theme.primaryColor),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    chat.name ?? '',
+                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  RichText(
+                    text: TextSpan(
+                      children: <TextSpan>[
+                        if (chat.lastMessage?.fromMe ?? false) ...<TextSpan>[
+                          TextSpan(
+                            text: 'You: ',
+                            style: TextStyle(
+                              color: theme.hintColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                        TextSpan(
+                          text: chat.lastMessage?.text?.body ?? '',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    List<Message> currentMessages = widget.whatsappService.messages[selectedChatId]?.toList() ?? [];
-    currentMessages.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
     final MediaQueryData mediaQuery = MediaQuery.of(context);
+
+    final bool hasSelectedChat = whatsappService.selectedChatId.isNotEmpty;
+    final List<Message> currentMessages = [];
+
+    Chat? selectedChat;
+    if (hasSelectedChat) {
+      selectedChat = widget.whatsappService.messages.keys.firstWhere((chat) => chat.id == whatsappService.selectedChatId);
+      currentMessages.addAll(whatsappService.messages[selectedChat] ?? []);
+    }
+
+    final Widget child = whatsappService.selectedChatId.isEmpty
+        ? _ConversationsList(whatsappService: whatsappService, widget: widget, onBuildConversationTile: buildChatConversationTile)
+        : _MessagesList(currentMessages: currentMessages, whatsappService: whatsappService, selectedChat: selectedChat, widget: widget);
+
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.start,
       children: <Widget>[
         if (widget._whatsappStatus == WhatsappServiceStatus.loggedOut) ...<Widget>[
           const Align(
@@ -119,39 +190,80 @@ class _HomeWhatsappConfigurationState extends State<HomeWhatsappConfiguration> w
               textAlign: TextAlign.center,
             ),
           ),
-        ] else if (widget._whatsappStatus == WhatsappServiceStatus.loggedInLoadingInitialMessages) ...<Widget>[
+        ] else if (widget._whatsappStatus == WhatsappServiceStatus.loggedInLoadingConversations) ...<Widget>[
           const Align(alignment: Alignment.center, child: YaruCircularProgressIndicator()),
         ] else ...<Widget>[
           if (!widget.parentalPaddingApplied) ...<Widget>[
             SizedBox(height: mediaQuery.padding.top),
           ],
-          YaruTabBar(
-            tabController: TabController(length: widget.whatsappService.messages.length, vsync: this),
-            tabs: widget.whatsappService.messages.keys.map(buildYaruTab).toList(),
-            onTap: onTabSelected,
-          ),
           Expanded(
-            child: ListView.separated(
-              padding: EdgeInsets.only(
-                bottom: 8 + mediaQuery.padding.bottom,
-                left: 8,
-                right: 8,
-                top: 8,
-              ),
-              itemCount: currentMessages.length,
-              physics: const BouncingScrollPhysics(),
-              separatorBuilder: (context, index) => const SizedBox(height: 8),
-              itemBuilder: (context, index) {
-                final message = currentMessages.elementAt(index);
-                return MessageTile(
-                  message: message,
-                  onMessageResponseRequested: widget.onMessageResponseRequested,
-                );
-              },
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: child,
             ),
           ),
         ],
       ],
+    );
+  }
+}
+
+class _ConversationsList extends StatelessWidget {
+  const _ConversationsList({
+    required this.whatsappService,
+    required this.widget,
+    required this.onBuildConversationTile,
+  });
+
+  final AbstractWhatsappService whatsappService;
+  final HomeWhatsappConfiguration widget;
+  final Widget Function(Chat chat, int index) onBuildConversationTile;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.separated(
+      padding: const EdgeInsets.all(12),
+      physics: const BouncingScrollPhysics(),
+      separatorBuilder: (context, index) => const SizedBox(width: 12),
+      itemCount: widget.whatsappService.messages.length,
+      itemBuilder: (context, index) {
+        final chat = widget.whatsappService.messages.keys.elementAt(index);
+        return onBuildConversationTile(chat, index);
+      },
+    );
+  }
+}
+
+class _MessagesList extends StatelessWidget {
+  const _MessagesList({
+    required this.currentMessages,
+    required this.whatsappService,
+    required this.selectedChat,
+    required this.widget,
+  });
+
+  final List<Message> currentMessages;
+  final AbstractWhatsappService whatsappService;
+  final Chat? selectedChat;
+  final HomeWhatsappConfiguration widget;
+
+  @override
+  Widget build(BuildContext context) {
+    return PaginatedList(
+      isRecentSearch: false,
+      items: currentMessages,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(12),
+      loadingIndicator: const Align(alignment: Alignment.center, child: YaruCircularProgressIndicator()),
+      isLastPage: whatsappService.messageEndReached[selectedChat] ?? false,
+      onLoadMore: (int index) => whatsappService.loadMessagesForChat(selectedChat!, offset: index),
+      builder: (context, index) {
+        final message = currentMessages.elementAt(index);
+        return MessageTile(
+          message: message,
+          onMessageResponseRequested: widget.onMessageResponseRequested,
+        );
+      },
     );
   }
 }
