@@ -16,6 +16,8 @@ dependencies:
   get_it: ^7.6.7
   shared_preferences: ^2.2.2
   dart_openai: ^5.0.0
+  cached_network_image: ^3.3.1
+  redis: ^4.0.0
 
   google_fonts: ^6.1.0
   universal_io: ^2.2.2

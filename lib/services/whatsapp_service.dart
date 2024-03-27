@@ -2,12 +2,7 @@ import 'dart:async';
 
 import 'package:cron/cron.dart';
 import 'package:dio/dio.dart';
-import 'package:whatsapp_ai/events/messages_updated_event.dart';
-import 'package:whatsapp_ai/events/whatsapp_auto_reply_changed_event.dart';
-import 'package:whatsapp_ai/events/whatsapp_chat_selected_event.dart';
-import 'package:whatsapp_ai/events/whatsapp_polling_interval_updated_event.dart';
-import 'package:whatsapp_ai/events/whatsapp_status_updated_event.dart';
-import 'package:whatsapp_ai/events/whatsapp_typing_time_changed_event.dart';
+import 'package:whatsapp_ai/events/events.dart';
 import 'package:whatsapp_ai/main.dart';
 import 'package:whatsapp_ai/models/models.dart';
 import 'package:whatsapp_ai/services/system_service.dart';
@@ -119,6 +114,7 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
   @override
   String get selectedChatId => _selectedChatId;
 
+  @override
   set selectedChatId(String value) {
     if (value == _selectedChatId) {
       return;
@@ -140,6 +136,10 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
 
   WhatsappServiceStatus _status = WhatsappServiceStatus.loggedOut;
   set status(WhatsappServiceStatus value) {
+    if (value == _status) {
+      return;
+    }
+
     _status = value;
     eventBus.fire(WhatsappStatusUpdatedEvent());
   }
@@ -247,7 +247,7 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
     }
 
     try {
-      final Response chatResponse = await whapiClient.get(
+      final Response chatResponse = await whatsappDio.get(
         'chats',
         options: Options(headers: apiHeaders),
       );
@@ -258,7 +258,7 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
 
       final List<dynamic> chatsJson = (chatResponse.data as Map<String, Object?>).containsKey('chats') ? (chatResponse.data as Map<String, Object?>)['chats'] as List<dynamic> : [];
       final List<Chat> newChats = chatsJson.map((chatJson) => Chat.fromJson(chatJson)).toList();
-      for (final chat in newChats) {
+      for (final Chat chat in newChats) {
         if (!messages.containsKey(chat)) {
           messages[chat] = [];
         }
@@ -280,8 +280,8 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
     }
 
     try {
-      final Response messageResponse = await whapiClient.get(
-        'messages/list/${chat.id}',
+      final Response messageResponse = await whatsappDio.get(
+        'https://gate.whapi.cloud/messages/list/${chat.id}',
         options: Options(headers: apiHeaders),
         queryParameters: {
           'offset': offset,
@@ -323,8 +323,8 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
     }
 
     try {
-      final response = await whapiClient.get(
-        'messages/list',
+      final response = await whatsappDio.get(
+        'https://gate.whapi.cloud/messages/list',
         options: Options(headers: apiHeaders),
         data: {
           'time_from': lastFetchTime?.millisecondsSinceEpoch,
@@ -355,8 +355,8 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
     }
 
     try {
-      final response = await whapiClient.get(
-        'chats/$chatId',
+      final response = await whatsappDio.get(
+        'https://gate.whapi.cloud/chats/$chatId',
         options: Options(headers: apiHeaders),
       );
 
@@ -503,8 +503,8 @@ class WhatsappService extends AbstractWhatsappService with AppServicesMixin {
     status = WhatsappServiceStatus.loggedInBusy;
 
     try {
-      final Response<Map<String, dynamic>> response = await whapiClient.post(
-        'messages/text',
+      final Response<Map<String, dynamic>> response = await whatsappDio.post(
+        'https://gate.whapi.cloud/messages/text',
         options: Options(headers: apiHeaders),
         data: {
           'to': message.chatId,

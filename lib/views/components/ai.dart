@@ -9,8 +9,8 @@ class HomeAIConfigurationPage extends StatefulWidget {
     required this.defaultPromptGuidance,
     required this.allPromptContent,
     required this.defaultPromptContent,
-    required this.promptGuidanceController,
-    required this.promptContentController,
+    required this.openAiPromptGuidanceController,
+    required this.openAiPromptContentController,
     required this.onDefaultPromptGuidanceSubmitted,
     required this.onDefaultPromptContentSubmitted,
     required this.onNewPromptGuidanceSubmitted,
@@ -27,8 +27,8 @@ class HomeAIConfigurationPage extends StatefulWidget {
   final Set<String> allPromptContent;
   final Set<String> defaultPromptContent;
 
-  final TextEditingController promptGuidanceController;
-  final TextEditingController promptContentController;
+  final TextEditingController openAiPromptGuidanceController;
+  final TextEditingController openAiPromptContentController;
 
   final Future<void> Function(Iterable<String>) onDefaultPromptGuidanceSubmitted;
   final Future<void> Function(Iterable<String>) onDefaultPromptContentSubmitted;
@@ -98,14 +98,14 @@ class _HomeAIConfigurationPageState extends State<HomeAIConfigurationPage> with 
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: TextField(
-            controller: selectedMode == AIContentMode.promptGuidance ? widget.promptGuidanceController : widget.promptContentController,
+            controller: selectedMode == AIContentMode.promptGuidance ? widget.openAiPromptGuidanceController : widget.openAiPromptGuidanceController,
             onSubmitted: _onInternalFormSubmitted,
             decoration: InputDecoration(
               border: const OutlineInputBorder(),
               labelText: selectedMode == AIContentMode.promptGuidance ? 'Enter some prompt guidance here...' : 'Enter some prompt content here...',
               suffix: YaruIconButton(
                 icon: const Icon(YaruIcons.send),
-                onPressed: () => _onInternalFormSubmitted(selectedMode == AIContentMode.promptGuidance ? widget.promptGuidanceController.text : widget.promptContentController.text),
+                onPressed: () => _onInternalFormSubmitted(selectedMode == AIContentMode.promptGuidance ? widget.openAiPromptContentController.text : widget.openAiPromptContentController.text),
               ),
             ),
           ),

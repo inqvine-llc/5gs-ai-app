@@ -1,0 +1,60 @@
+aiohttp @ file:///D:/bld/aiohttp_1707669940890/work
+aiosignal @ file:///home/conda/feedstock_root/build_artifacts/aiosignal_1667935791922/work
+annotated-types @ file:///home/conda/feedstock_root/build_artifacts/annotated-types_1696634205638/work
+anyio @ file:///home/conda/feedstock_root/build_artifacts/anyio_1708355285029/work
+async-timeout @ file:///home/conda/feedstock_root/build_artifacts/async-timeout_1691763562544/work
+attrs @ file:///home/conda/feedstock_root/build_artifacts/attrs_1704011227531/work
+Brotli @ file:///D:/bld/brotli-split_1695989908365/work
+certifi @ file:///C:/b/abs_35d7n66oz9/croot/certifi_1707229248467/work/certifi
+charset-normalizer @ file:///home/conda/feedstock_root/build_artifacts/charset-normalizer_1698833585322/work
+click @ file:///C:/Users/dev-admin/perseverance-python-buildout/croot/click_1699473800648/work
+colorama @ file:///home/conda/feedstock_root/build_artifacts/colorama_1666700638685/work
+dataclasses-json @ file:///home/conda/feedstock_root/build_artifacts/dataclasses-json_1706837029949/work
+distro @ file:///home/conda/feedstock_root/build_artifacts/distro_1704321475663/work
+exceptiongroup @ file:///home/conda/feedstock_root/build_artifacts/exceptiongroup_1704921103267/work
+Flask @ file:///C:/Users/dev-admin/perseverance-python-buildout/croot/flask_1699481354497/work
+frozenlist @ file:///D:/bld/frozenlist_1702645631040/work
+greenlet @ file:///D:/bld/greenlet_1703201753027/work
+h11 @ file:///home/conda/feedstock_root/build_artifacts/h11_1664132893548/work
+h2 @ file:///home/conda/feedstock_root/build_artifacts/h2_1634280454336/work
+hpack==4.0.0
+httpcore @ file:///home/conda/feedstock_root/build_artifacts/httpcore_1708529260247/work
+httpx @ file:///home/conda/feedstock_root/build_artifacts/httpx_1708530890843/work
+hyperframe @ file:///home/conda/feedstock_root/build_artifacts/hyperframe_1619110129307/work
+idna @ file:///home/conda/feedstock_root/build_artifacts/idna_1701026962277/work
+itsdangerous @ file:///tmp/build/80754af9/itsdangerous_1621432558163/work
+Jinja2 @ file:///C:/Users/dev-admin/perseverance-python-buildout/croot/jinja2_1707426091452/work
+jsonpatch @ file:///home/conda/feedstock_root/build_artifacts/jsonpatch_1695536281965/work
+jsonpointer @ file:///D:/bld/jsonpointer_1695397573386/work
+langchain @ file:///home/conda/feedstock_root/build_artifacts/langchain_1708677218603/work
+langchain-community @ file:///home/conda/feedstock_root/build_artifacts/langchain-community_1708717728087/work
+langchain-core @ file:///home/conda/feedstock_root/build_artifacts/langchain-core_1709009570238/work
+langchain-openai==0.0.8
+langsmith @ file:///home/conda/feedstock_root/build_artifacts/langsmith_1709089498397/work
+MarkupSafe @ file:///C:/Users/dev-admin/perseverance-python-buildout/croot/markupsafe_1707425732791/work
+marshmallow @ file:///home/conda/feedstock_root/build_artifacts/marshmallow_1708981930756/work
+multidict @ file:///D:/bld/multidict_1707040885223/work
+mypy-extensions @ file:///home/conda/feedstock_root/build_artifacts/mypy_extensions_1675543315189/work
+numpy @ file:///D:/bld/numpy_1707225519803/work/dist/numpy-1.26.4-cp312-cp312-win_amd64.whl#sha256=ffaa9485afb654c70a658c3ad4b7d2e60c60d8450d3779408d3a496564dc1d43
+openai @ file:///home/conda/feedstock_root/build_artifacts/openai_1709171921217/work
+orjson @ file:///D:/bld/orjson_1708717307406/work/target/wheels/orjson-3.9.15-cp312-none-win_amd64.whl#sha256=d09a857aed85d9f70e748ea031576abeebc00a189fce66d80e000741d980e237
+packaging @ file:///home/conda/feedstock_root/build_artifacts/packaging_1696202382185/work
+pydantic @ file:///home/conda/feedstock_root/build_artifacts/pydantic_1709075187841/work
+pydantic_core @ file:///D:/bld/pydantic-core_1708700616556/work
+PySocks @ file:///D:/bld/pysocks_1661604991356/work
+PyYAML @ file:///D:/bld/pyyaml_1695373772678/work
+regex==2023.12.25
+requests @ file:///home/conda/feedstock_root/build_artifacts/requests_1684774241324/work
+setuptools==69.1.1
+sniffio @ file:///home/conda/feedstock_root/build_artifacts/sniffio_1708952932303/work
+SQLAlchemy @ file:///D:/bld/sqlalchemy_1707849039185/work
+tenacity @ file:///home/conda/feedstock_root/build_artifacts/tenacity_1692026804430/work
+tiktoken==0.6.0
+tqdm @ file:///home/conda/feedstock_root/build_artifacts/tqdm_1707598593068/work
+typing-inspect @ file:///home/conda/feedstock_root/build_artifacts/typing_inspect_1685820062773/work
+typing_extensions @ file:///home/conda/feedstock_root/build_artifacts/typing_extensions_1708904622550/work
+urllib3 @ file:///home/conda/feedstock_root/build_artifacts/urllib3_1708239446578/work
+Werkzeug @ file:///C:/b/abs_3901hwqcw0/croot/werkzeug_1706210134718/work
+wheel==0.42.0
+win-inet-pton @ file:///D:/bld/win_inet_pton_1667051142467/work
+yarl @ file:///D:/bld/yarl_1705508472656/work

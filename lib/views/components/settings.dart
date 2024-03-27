@@ -16,10 +16,13 @@ class HomeSettingsPage extends StatelessWidget with AppServicesMixin {
     required this.yaruVariant,
     required this.isDarkMode,
     required this.whatsappTypingTime,
-    required this.openaiApiTokenTextController,
+    required this.openAiTokenTextController,
+    required this.onOpenAiTokenSubmitted,
+    required this.onOpenAiLangchainServerUrlSubmitted,
+    required this.openAiLangchainServerUrl,
+    required this.openAiLangchainServerTextController,
     required this.whapiApiTokenTextController,
     required this.onWhapiApiTokenSubmitted,
-    required this.onOpenaiApiTokenSubmitted,
     required this.whatsappIntervalTextController,
     required this.onWhatsappIntervalSubmitted,
     required this.onModelChangeRequested,
@@ -29,24 +32,33 @@ class HomeSettingsPage extends StatelessWidget with AppServicesMixin {
     required this.whatsappTypingTimeTextController,
     required this.onWhatsappTypingTimeChangeRequested,
     required this.onWhatsappAutoReplyChangeRequested,
+    required this.redisAddressTextController,
+    required this.redisPortTextController,
+    required this.onRedisAddressChanged,
+    required this.onRedisPortChanged,
     this.parentalPaddingApplied = false,
     super.key,
   });
 
-  final String whatApiToken;
   final String openaiApiToken;
-  final String defaultModel;
-  final YaruVariant yaruVariant;
-  final bool isDarkMode;
+  final String openAiLangchainServerUrl;
+  final Future<void> Function(String) onOpenAiTokenSubmitted;
+  final Future<void> Function(String) onOpenAiLangchainServerUrlSubmitted;
+  final TextEditingController openAiTokenTextController;
+  final TextEditingController openAiLangchainServerTextController;
+
+  final String whatApiToken;
   final int whatsappTypingTime;
   final bool whatsappAutoReplyEnabled;
 
-  final TextEditingController openaiApiTokenTextController;
+  final String defaultModel;
+  final YaruVariant yaruVariant;
+  final bool isDarkMode;
+
   final TextEditingController whapiApiTokenTextController;
   final TextEditingController whatsappIntervalTextController;
   final TextEditingController whatsappTypingTimeTextController;
 
-  final Future<void> Function(String) onOpenaiApiTokenSubmitted;
   final Future<void> Function(String) onWhapiApiTokenSubmitted;
   final Future<void> Function(String) onWhatsappIntervalSubmitted;
   final Future<void> Function(int) onWhatsappTypingTimeChangeRequested;
@@ -54,6 +66,12 @@ class HomeSettingsPage extends StatelessWidget with AppServicesMixin {
   final Future<void> Function(SupportedModel? model) onModelChangeRequested;
   final Future<void> Function(YaruVariant varient) onThemeChangeRequested;
   final Future<void> Function(bool) onDarkModeChangeRequested;
+
+  final TextEditingController redisAddressTextController;
+  final TextEditingController redisPortTextController;
+
+  final Future<void> Function(String) onRedisAddressChanged;
+  final Future<void> Function(String) onRedisPortChanged;
 
   final bool parentalPaddingApplied;
 
@@ -97,6 +115,13 @@ class HomeSettingsPage extends StatelessWidget with AppServicesMixin {
             ),
             Row(
               children: [
+                Icon(SimpleIcons.redis, size: 24),
+                SizedBox(width: 12),
+                Text('Redis Settings'),
+              ],
+            ),
+            Row(
+              children: [
                 Icon(SimpleIcons.ubuntu, size: 24),
                 SizedBox(width: 12),
                 Text('Theme Settings'),
@@ -120,7 +145,12 @@ class HomeSettingsPage extends StatelessWidget with AppServicesMixin {
           children: [
             Padding(
               padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-              child: Column(children: buildOpenAIWidgets(initialModelValue: initialModelValue, onModelChangeRequested: onModelChangeRequested)),
+              child: Column(
+                children: buildOpenAIWidgets(
+                  initialModelValue: initialModelValue,
+                  onModelChangeRequested: onModelChangeRequested,
+                ),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
@@ -133,6 +163,18 @@ class HomeSettingsPage extends StatelessWidget with AppServicesMixin {
                   whatsappTypingTimeTextController: whatsappTypingTimeTextController,
                   onWhatsappTypingTimeChangeRequested: onWhatsappTypingTimeChangeRequested,
                   whatsappTypingTime: whatsappTypingTime,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+              child: Column(
+                children: buildRedisWidgets(
+                  onRedisAddressChanged: onRedisAddressChanged,
+                  onRedisPortChanged: onRedisPortChanged,
+                  isRedisConnected: redisService.isConnectionOpen,
+                  redisAddressTextController: redisAddressTextController,
+                  redisPortTextController: redisPortTextController,
                 ),
               ),
             ),
@@ -196,7 +238,7 @@ class HomeSettingsPage extends StatelessWidget with AppServicesMixin {
         controller: whatsappIntervalTextController,
         onSubmitted: onWhatsappIntervalSubmitted,
         decoration: InputDecoration(
-          labelText: 'New Message Polling Interval (ms)',
+          labelText: 'New message polling interval (ms)',
           suffix: YaruIconButton(onPressed: () => onWhatsappIntervalSubmitted(whatsappIntervalTextController.text), icon: const Icon(YaruIcons.send)),
         ),
       ),
@@ -225,17 +267,58 @@ class HomeSettingsPage extends StatelessWidget with AppServicesMixin {
     ];
   }
 
+  List<Widget> buildRedisWidgets({
+    required Future<void> Function(String) onRedisAddressChanged,
+    required Future<void> Function(String) onRedisPortChanged,
+    required TextEditingController redisAddressTextController,
+    required TextEditingController redisPortTextController,
+    required bool isRedisConnected,
+  }) {
+    return [
+      TextField(
+        controller: redisAddressTextController,
+        onSubmitted: onRedisAddressChanged,
+        decoration: InputDecoration(
+          labelText: 'Redis Address',
+          suffix: YaruIconButton(
+            onPressed: () => onRedisAddressChanged(redisAddressTextController.text),
+            icon: const Icon(YaruIcons.send),
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+      TextField(
+        controller: redisPortTextController,
+        onSubmitted: onRedisPortChanged,
+        decoration: InputDecoration(
+          labelText: 'Redis Port',
+          suffix: YaruIconButton(
+            onPressed: () => onRedisPortChanged(redisPortTextController.text),
+            icon: const Icon(YaruIcons.send),
+          ),
+        ),
+      ),
+      const SizedBox(height: 16),
+      Text(
+        isRedisConnected ? 'Connected to Redis' : 'Not connected to Redis',
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w300),
+      ),
+    ];
+  }
+
   List<Widget> buildOpenAIWidgets({
     required TextEditingValue? initialModelValue,
     required Future<void> Function(SupportedModel? model) onModelChangeRequested,
   }) {
+    //
+    final bool shouldDisplayLangchainConfiguration = generativeAIService.defaultModel == SupportedModel.customLangchainServer.name;
     return [
       TextField(
-        controller: openaiApiTokenTextController,
-        onSubmitted: onOpenaiApiTokenSubmitted,
+        controller: openAiTokenTextController,
+        onSubmitted: onOpenAiTokenSubmitted,
         decoration: InputDecoration(
           labelText: 'OpenAI API Token',
-          suffix: YaruIconButton(onPressed: () => onOpenaiApiTokenSubmitted(openaiApiTokenTextController.text), icon: const Icon(YaruIcons.send)),
+          suffix: YaruIconButton(onPressed: () => onOpenAiTokenSubmitted(openAiTokenTextController.text), icon: const Icon(YaruIcons.send)),
         ),
       ),
       const SizedBox(height: 16),
@@ -256,6 +339,23 @@ class HomeSettingsPage extends StatelessWidget with AppServicesMixin {
           return supportedModels;
         },
       ),
+      if (shouldDisplayLangchainConfiguration) ...<Widget>[
+        const SizedBox(height: 16),
+        const Text(
+          'A langchain server can combine the results of APIs with the generative ability of OpenAI. This is useful for custom models and custom data sources.\nIf you have been given a URL to use, please enter it here and save!',
+          textAlign: TextAlign.left,
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w300),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: openAiLangchainServerTextController,
+          onSubmitted: onOpenAiLangchainServerUrlSubmitted,
+          decoration: InputDecoration(
+            labelText: 'Langchain Server URL',
+            suffix: YaruIconButton(onPressed: () => onOpenAiLangchainServerUrlSubmitted(openAiLangchainServerTextController.text), icon: const Icon(YaruIcons.send)),
+          ),
+        ),
+      ],
     ];
   }
 

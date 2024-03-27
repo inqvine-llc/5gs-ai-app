@@ -41,12 +41,19 @@ class MessageTile extends StatelessWidget with AppServicesMixin {
       );
     }
 
-    Chat? selectedChat;
-    if (whatsappService.selectedChatId.isNotEmpty) {
-      selectedChat = whatsappService.messages.keys.firstWhere((chat) => chat.id == whatsappService.selectedChatId);
-    }
-
     final ThemeData theme = Theme.of(context);
+    Widget leading = const Icon(
+      SimpleIcons.whatsapp,
+      size: 24,
+    );
+
+    if (!message.fromMe) {
+      leading = Icon(
+        YaruIcons.user,
+        size: 24,
+        color: theme.primaryColor,
+      );
+    }
 
     return InqvineTapHandler(
       onTap: () => onMessageResponseRequested(message),
@@ -57,29 +64,7 @@ class MessageTile extends StatelessWidget with AppServicesMixin {
         ),
         child: Row(
           children: <Widget>[
-            if (message.fromMe) ...<Widget>[
-              const Icon(
-                YaruIcons.user,
-                size: 24,
-              ),
-            ] else if (selectedChat?.chatPic?.isNotEmpty ?? false) ...<Widget>[
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(100),
-                  child: Image.network(
-                    selectedChat?.chatPic ?? '',
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              ),
-            ] else ...<Widget>[
-              const Icon(
-                SimpleIcons.whatsapp,
-                size: 24,
-              ),
-            ],
+            leading,
             const SizedBox(width: 12),
             Expanded(
               child: Column(
