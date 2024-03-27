@@ -1,14 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:inqvine_core_ui/inqvine_core_ui.dart';
 import 'package:paginated_list/paginated_list.dart';
-import 'package:whatsapp_ai/events/messages_updated_event.dart';
-import 'package:whatsapp_ai/events/whatsapp_chat_selected_event.dart';
+import 'package:whatsapp_ai/events/events.dart';
 import 'package:whatsapp_ai/main.dart';
 import 'package:whatsapp_ai/models/models.dart';
 import 'package:whatsapp_ai/services/whatsapp_service.dart';
 import 'package:whatsapp_ai/views/components/message.dart';
+import 'package:whatsapp_ai/views/components/whatsapp_conversation_tile.dart';
 import 'package:yaru_widgets/yaru_widgets.dart';
 
 class HomeWhatsappConfiguration extends StatefulWidget {
@@ -30,8 +29,6 @@ class HomeWhatsappConfiguration extends StatefulWidget {
 }
 
 class HomeWhatsappConfigurationState extends State<HomeWhatsappConfiguration> with TickerProviderStateMixin, AppServicesMixin {
-  static const double kTabBarAvatarSize = 52.0;
-
   StreamSubscription<MessagesUpdatedEvent>? _messagesUpdatedEventSubscription;
   StreamSubscription<WhatsappChatSelectedEvent>? _whatsappChatSelectedEventSubscription;
 
@@ -78,87 +75,10 @@ class HomeWhatsappConfigurationState extends State<HomeWhatsappConfiguration> wi
   }
 
   Widget buildChatConversationTile(Chat chat, int index) {
-    final ThemeData theme = Theme.of(context);
-
-    return InqvineTapHandler(
-      onTap: () => onTabChangeRequested(index),
-      child: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: whatsappService.selectedChatId == chat.id ? theme.primaryColor.withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: <Widget>[
-            if (chat.chatPicFull?.isNotEmpty ?? false) ...<Widget>[
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(kTabBarAvatarSize / 2),
-                  border: Border.all(color: theme.primaryColor, width: 2),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(2),
-                  child: CircleAvatar(
-                    radius: kTabBarAvatarSize / 2,
-                    backgroundImage: NetworkImage(chat.chatPicFull ?? ''),
-                  ),
-                ),
-              ),
-            ] else ...<Widget>[
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(kTabBarAvatarSize / 2),
-                  border: Border.all(color: theme.primaryColor, width: 2),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(2),
-                  child: CircleAvatar(
-                    radius: kTabBarAvatarSize / 2,
-                    child: Text(
-                      chat.name?.substring(0, 1) ?? '',
-                      style: theme.textTheme.titleLarge?.copyWith(color: theme.primaryColor),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    chat.name ?? '',
-                    style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  RichText(
-                    text: TextSpan(
-                      children: <TextSpan>[
-                        if (chat.lastMessage?.fromMe ?? false) ...<TextSpan>[
-                          TextSpan(
-                            text: 'You: ',
-                            style: TextStyle(
-                              color: theme.hintColor,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                        TextSpan(
-                          text: chat.lastMessage?.text?.body ?? '',
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+    return WhatsappConversationTile(
+      chat: chat,
+      index: index,
+      onTabChangeRequested: onTabChangeRequested,
     );
   }
 

@@ -7,11 +7,14 @@ import 'package:event_bus/event_bus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get_it/get_it.dart';
+import 'package:redis/redis.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:universal_io/io.dart';
-import 'package:whatsapp_ai/events/theme_updated_event.dart';
+import 'package:whatsapp_ai/events/events.dart';
 import 'package:whatsapp_ai/extensions/yaru_extensions.dart';
 import 'package:whatsapp_ai/services/generative_ai_service.dart';
+import 'package:whatsapp_ai/services/persona_service.dart';
+import 'package:whatsapp_ai/services/redis_service.dart';
 import 'package:whatsapp_ai/services/system_service.dart';
 import 'package:whatsapp_ai/services/whatsapp_service.dart';
 import 'package:window_manager/window_manager.dart';
@@ -59,10 +62,7 @@ Future<void> configureWindowManager() async {
 }
 
 Future<void> registerThirdPartyServices() async {
-  di.registerSingleton<Dio>(Dio(BaseOptions(
-    baseUrl: 'https://gate.whapi.cloud/',
-  )));
-
+  di.registerSingleton<Dio>(Dio(BaseOptions(baseUrl: 'https://gate.whapi.cloud/')), instanceName: 'whatsapp');
   di.registerSingleton<Cron>(Cron());
   di.registerSingleton<EventBus>(EventBus());
   di.registerSingleton<SharedPreferences>(await SharedPreferences.getInstance());
@@ -72,24 +72,35 @@ Future<void> registerInternalServices() async {
   final AbstractGenerativeAIService generativeAIService = GenerativeAIService();
   final AbstractWhatsappService whatsappService = WhatsappService();
   final AbstractSystemService systemService = SystemService();
+  final AbstractRedisService redisService = RedisService();
+  final AbstractPersonaService personaService = PersonaService();
 
   await generativeAIService.initialize();
   await whatsappService.initialize();
+  await redisService.initialize();
 
   di.registerSingleton<AbstractGenerativeAIService>(generativeAIService);
   di.registerSingleton<AbstractWhatsappService>(whatsappService);
   di.registerSingleton<AbstractSystemService>(systemService);
+  di.registerSingleton<AbstractRedisService>(redisService);
+  di.registerSingleton<AbstractPersonaService>(personaService);
 }
 
 mixin AppServicesMixin {
-  Dio get whapiClient => di<Dio>();
+  Dio get whatsappDio => di<Dio>(instanceName: 'whatsapp');
+  Dio get langchainDio => di<Dio>(instanceName: 'langchainServer');
+
   Cron get cron => di<Cron>();
   EventBus get eventBus => di<EventBus>();
   SharedPreferences get sharedPreferences => di<SharedPreferences>();
 
+  RedisConnection get redisConnection => di<RedisConnection>();
+
   AbstractWhatsappService get whatsappService => di<AbstractWhatsappService>();
   AbstractGenerativeAIService get generativeAIService => di<AbstractGenerativeAIService>();
   AbstractSystemService get systemService => di<AbstractSystemService>();
+  AbstractRedisService get redisService => di<AbstractRedisService>();
+  AbstractPersonaService get personaService => di<AbstractPersonaService>();
 }
 
 class App extends StatefulWidget {

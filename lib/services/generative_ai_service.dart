@@ -1,14 +1,16 @@
-import 'package:whatsapp_ai/events/model_updated_event.dart';
-import 'package:whatsapp_ai/events/response_content_updated_event.dart';
-import 'package:whatsapp_ai/events/response_guidance_updated_event.dart';
-import 'package:whatsapp_ai/events/open_ai_api_key_updated_event.dart';
+import 'package:dio/dio.dart';
+
+import 'package:whatsapp_ai/events/events.dart';
 import 'package:whatsapp_ai/main.dart';
 import 'package:whatsapp_ai/models/models.dart';
 import 'package:dart_openai/dart_openai.dart';
+import 'package:whatsapp_ai/services/system_service.dart';
 
 abstract class AbstractGenerativeAIService {
   String get apiKey;
   String get defaultModel;
+
+  String get langchainServerUrl;
 
   Set<String> get defaultPromptGuidance;
   Set<String> get defaultPromptContent;
@@ -45,12 +47,18 @@ abstract class AbstractGenerativeAIService {
 
   Future<void> saveDefaultModel(String model);
   Future<void> removeDefaultModel();
+
+  Future<void> reloadLangchainServerUrl();
+  Future<void> setLangchainServerUrl(String url);
+
+  Future<String> performOpenAICompletion(Iterable<OpenAIChatCompletionChoiceMessageModel> requestMessages);
 }
 
 enum SupportedModel {
   gpt3,
   gpt35Turbo,
-  gpt4;
+  gpt4,
+  customLangchainServer;
 
   String get name {
     switch (this) {
@@ -60,6 +68,8 @@ enum SupportedModel {
         return 'gpt-3.5-turbo';
       case SupportedModel.gpt4:
         return 'gpt-4';
+      case SupportedModel.customLangchainServer:
+        return 'custom-langchain-server';
     }
   }
 }
@@ -74,10 +84,17 @@ class GenerativeAIService extends AbstractGenerativeAIService with AppServicesMi
   static const String kDefaultGuidanceKey = 'defaultResponseGuidance';
   static const String kDefaultContentKey = 'defaultResponseContent';
 
+  static const String kLangchainServerUrlKey = 'langchainServerUrl';
+
   String _apiKey = '';
 
   @override
   String get apiKey => _apiKey;
+
+  String _langchainServerUrl = '';
+
+  @override
+  String get langchainServerUrl => _langchainServerUrl;
 
   @override
   String get defaultModel => sharedPreferences.getString(kDefaultModel) ?? 'gpt-3.5-turbo';
@@ -101,6 +118,7 @@ class GenerativeAIService extends AbstractGenerativeAIService with AppServicesMi
       reloadDefaultContent(),
       reloadAllGuidance(),
       reloadAllContent(),
+      reloadLangchainServerUrl(),
     ]);
 
     _apiKey = sharedPreferences.getString(kOpenaiApiKey) ?? '';
@@ -201,24 +219,69 @@ class GenerativeAIService extends AbstractGenerativeAIService with AppServicesMi
 
   @override
   Future<String> generateReply(Message messageContainingPrompt, Map<OpenAIChatMessageRole, Set<String>> params) async {
-    final String messageText = messageContainingPrompt.text.body;
-    if (messageText.isEmpty) {
-      systemService.showErrorToast('Message cannot be empty');
-      return '';
+    try {
+      final String messageText = messageContainingPrompt.text.body;
+      if (messageText.isEmpty) {
+        systemService.showErrorToast('Message cannot be empty');
+        return '';
+      }
+
+      if (!isLoggedIn) {
+        systemService.showErrorToast('OpenAI API key is not set');
+        return '';
+      }
+
+      final requestMessages = params.entries.map((entry) {
+        return OpenAIChatCompletionChoiceMessageModel(
+          role: entry.key,
+          content: entry.value.map((e) => OpenAIChatCompletionChoiceMessageContentItemModel.text(e)).toList(),
+        );
+      });
+
+      if (defaultModel == SupportedModel.customLangchainServer.name) {
+        return await performLangchainServerCompletion(messageText, requestMessages);
+      }
+
+      return await performOpenAICompletion(requestMessages);
+    } catch (e) {
+      systemService.showErrorToast('Failed to generate reply');
+      rethrow;
+    }
+  }
+
+  Future<String> performLangchainServerCompletion(String messageText, Iterable<OpenAIChatCompletionChoiceMessageModel> requestMessages) async {
+    final List<Map<String, dynamic>> choices = [];
+    for (final OpenAIChatCompletionChoiceMessageModel message in requestMessages) {
+      final choice = {
+        'role': message.role.name,
+        'content': message.content?.map((e) => e.text).join(' ') ?? '',
+      };
+
+      choices.add(choice);
     }
 
-    if (!isLoggedIn) {
-      systemService.showErrorToast('OpenAI API key is not set');
-      return '';
+    if (!di.isRegistered<Dio>(instanceName: 'langchainServer')) {
+      throw Exception('Langchain server is not registered');
     }
 
-    final requestMessages = params.entries.map((entry) {
-      return OpenAIChatCompletionChoiceMessageModel(
-        role: entry.key,
-        content: entry.value.map((e) => OpenAIChatCompletionChoiceMessageContentItemModel.text(e)).toList(),
-      );
-    });
+    final Response response = await langchainDio.post(
+      '/answer_prompt',
+      data: {
+        'prompt': messageText,
+        'choices': choices,
+      },
+    );
 
+    if (response.statusCode != 200) {
+      throw Exception('Failed to complete the request');
+    }
+
+    final Map<String, dynamic> data = response.data;
+    return data.containsKey('response') ? data['response'] : '';
+  }
+
+  @override
+  Future<String> performOpenAICompletion(Iterable<OpenAIChatCompletionChoiceMessageModel> requestMessages) async {
     final OpenAIChatCompletionModel completion = await OpenAI.instance.chat.create(
       model: 'gpt-3.5-turbo',
       messages: requestMessages.toList(),
@@ -285,5 +348,41 @@ class GenerativeAIService extends AbstractGenerativeAIService with AppServicesMi
   Future<void> removeDefaultModel() async {
     await sharedPreferences.remove(kDefaultModel);
     eventBus.fire(ModelUpdatedEvent());
+  }
+
+  @override
+  Future<void> reloadLangchainServerUrl() async {
+    _langchainServerUrl = sharedPreferences.getString(kLangchainServerUrlKey) ?? '';
+
+    await _reloadLangchainDio();
+
+    eventBus.fire(LangchainServerUrlUpdatedEvent());
+  }
+
+  @override
+  Future<void> setLangchainServerUrl(String url) async {
+    _langchainServerUrl = url;
+
+    await sharedPreferences.setString(kLangchainServerUrlKey, url);
+    await _reloadLangchainDio();
+
+    if (di.isRegistered<AbstractSystemService>()) {
+      systemService.showInformationToast('Langchain server URL updated to $url');
+    }
+
+    eventBus.fire(LangchainServerUrlUpdatedEvent());
+  }
+
+  Future<void> _reloadLangchainDio() async {
+    if (di.isRegistered<Dio>(instanceName: 'langchainServer')) {
+      await di.unregister<Dio>(instanceName: 'langchainServer');
+    }
+
+    if (_langchainServerUrl.isEmpty) {
+      return;
+    }
+
+    di.registerSingleton<Dio>(Dio(BaseOptions(baseUrl: _langchainServerUrl)), instanceName: 'langchainServer');
+    eventBus.fire(LangchainServerUrlUpdatedEvent());
   }
 }

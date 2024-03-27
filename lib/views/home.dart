@@ -3,22 +3,15 @@ import 'dart:async';
 import 'package:dart_openai/dart_openai.dart';
 import 'package:flutter/material.dart';
 import 'package:simple_icons/simple_icons.dart';
-import 'package:whatsapp_ai/events/model_updated_event.dart';
-import 'package:whatsapp_ai/events/response_content_updated_event.dart';
 
-import 'package:whatsapp_ai/events/response_guidance_updated_event.dart';
-import 'package:whatsapp_ai/events/messages_updated_event.dart';
-import 'package:whatsapp_ai/events/whatsapp_auto_reply_changed_event.dart';
-import 'package:whatsapp_ai/events/whatsapp_chat_selected_event.dart';
-import 'package:whatsapp_ai/events/whatsapp_polling_interval_updated_event.dart';
-import 'package:whatsapp_ai/events/whatsapp_status_updated_event.dart';
-import 'package:whatsapp_ai/events/whatsapp_typing_time_changed_event.dart';
+import 'package:whatsapp_ai/events/events.dart';
 import 'package:whatsapp_ai/extensions/yaru_extensions.dart';
 import 'package:whatsapp_ai/main.dart';
 import 'package:whatsapp_ai/models/models.dart';
 import 'package:whatsapp_ai/services/generative_ai_service.dart';
 import 'package:whatsapp_ai/services/whatsapp_service.dart';
 import 'package:whatsapp_ai/views/components/ai.dart';
+import 'package:whatsapp_ai/views/components/persona.dart';
 import 'package:whatsapp_ai/views/components/settings.dart';
 import 'package:whatsapp_ai/views/components/whatsapp.dart';
 import 'package:yaru/yaru.dart';
@@ -41,19 +34,32 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
   StreamSubscription<WhatsappAutoReplyChangedEvent>? _whatsappAutoReplyChangedSubscription;
   StreamSubscription<WhatsappTypingTimeChangedEvent>? _whatsappTypingTimeChangedSubscription;
   StreamSubscription<WhatsappChatSelectedEvent>? _whatsappChatSelectedSubscription;
+
+  StreamSubscription<RedisConnectionUpdatedEvent>? _redisConnectionUpdatedSubscription;
+
   StreamSubscription<ResponseGuidanceUpdatedEvent>? _responseGuidanceUpdatedSubscription;
   StreamSubscription<ResponseContentUpdatedEvent>? _responseContentUpdatedSubscription;
-  StreamSubscription<ModelUpdatedEvent>? _modelUpdatedSubscription;
 
-  final int kPageCount = 4;
+  StreamSubscription<ModelUpdatedEvent>? _modelUpdatedSubscription;
+  StreamSubscription<LangchainServerUrlUpdatedEvent>? _langchainServerUrlUpdatedSubscription;
+
+  final int kPageCount = 5;
   late final YaruPageController pageController;
 
-  final TextEditingController promptGuidanceController = TextEditingController();
-  final TextEditingController promptContentController = TextEditingController();
-  final TextEditingController openaiApiTokenTextController = TextEditingController();
+  final TextEditingController openAiLangchainServerTextController = TextEditingController();
+  final TextEditingController openAiTokenTextController = TextEditingController();
+  final TextEditingController openAiPromptGuidanceController = TextEditingController();
+  final TextEditingController openAiPromptContentController = TextEditingController();
+
   final TextEditingController whapiApiTokenTextController = TextEditingController();
   final TextEditingController whatsappIntervalTextController = TextEditingController();
   final TextEditingController whatsappTypingTimeTextController = TextEditingController();
+
+  final TextEditingController redisAddressTextController = TextEditingController();
+  final TextEditingController redisPortTextController = TextEditingController();
+
+  final TextEditingController personaTextController = TextEditingController();
+  final List<String> personaSuggestions = <String>[];
 
   int _currentPage = 0;
   int get currentPage => _currentPage;
@@ -81,6 +87,15 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
     }
   }
 
+  bool _isGeneratingPersona = false;
+  bool get isGeneratingPersona => _isGeneratingPersona;
+  set isGeneratingPersona(bool value) {
+    _isGeneratingPersona = value;
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -90,7 +105,6 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
 
   Future<void> onFirstRender(Duration timeStamp) async {
     whatsappStatus = whatsappService.status;
-
     pageController.index = currentPage;
 
     if (whatsappService.typingTime > 0) {
@@ -106,7 +120,11 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
     }
 
     if (generativeAIService.apiKey.isNotEmpty) {
-      openaiApiTokenTextController.text = generativeAIService.apiKey;
+      openAiTokenTextController.text = generativeAIService.apiKey;
+    }
+
+    if (generativeAIService.langchainServerUrl.isNotEmpty) {
+      openAiLangchainServerTextController.text = generativeAIService.langchainServerUrl;
     }
 
     setState(() {});
@@ -137,6 +155,12 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
 
     await _modelUpdatedSubscription?.cancel();
     _modelUpdatedSubscription = eventBus.on<ModelUpdatedEvent>().listen(onModelUpdated);
+
+    await _langchainServerUrlUpdatedSubscription?.cancel();
+    _langchainServerUrlUpdatedSubscription = eventBus.on<LangchainServerUrlUpdatedEvent>().listen(onLangchainServerUrlUpdated);
+
+    await _redisConnectionUpdatedSubscription?.cancel();
+    _redisConnectionUpdatedSubscription = eventBus.on<RedisConnectionUpdatedEvent>().listen(onRedisConnectionUpdated);
   }
 
   Future<void> onWhatsAppTokenSubmitted(String token) async {
@@ -207,6 +231,40 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
     await systemService.setDarkMode(value);
   }
 
+  Future<void> onRedisConnectionAddressUpdated(String address) async {
+    if (!mounted) return;
+    setState(() {});
+
+    attemptToConnectRedis();
+  }
+
+  Future<void> onRedisConnectionPortUpdated(String port) async {
+    if (!mounted) return;
+    setState(() {});
+
+    final int? newPort = int.tryParse(port);
+    if (newPort == null) return;
+
+    attemptToConnectRedis();
+  }
+
+  Future<void> attemptToConnectRedis() async {
+    final String address = redisAddressTextController.text;
+    final int port = int.tryParse(redisPortTextController.text) ?? 0;
+
+    if (redisService.isConnectionOpen) {
+      systemService.showSuccessToast('Disconnecting from old redis connection');
+      await redisService.disconnect();
+    }
+
+    if (address.isEmpty || port == 0) {
+      systemService.showErrorToast('Invalid address or port');
+      return;
+    }
+
+    await redisService.connect(address, port);
+  }
+
   void onMessagesUpdated(MessagesUpdatedEvent event) {
     if (!mounted) return;
     setState(() {});
@@ -268,6 +326,16 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
     setState(() {});
   }
 
+  Future<void> onLangchainServerUrlUpdated(LangchainServerUrlUpdatedEvent event) async {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> onRedisConnectionUpdated(RedisConnectionUpdatedEvent event) async {
+    if (!mounted) return;
+    setState(() {});
+  }
+
   Future<void> onMessageResponseRequested(Message message) async {
     isBusy = true;
 
@@ -306,12 +374,12 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
 
   Future<void> onNewPromptGuidanceSubmitted(String prompt) async {
     await generativeAIService.savePromptGuidance(prompt);
-    promptGuidanceController.clear();
+    openAiPromptGuidanceController.clear();
   }
 
   Future<void> onPromptContentSubmitted(String prompt) async {
     await generativeAIService.savePromptContent(prompt);
-    promptContentController.clear();
+    openAiPromptContentController.clear();
   }
 
   Future<void> onRemovePromptGuidanceRequested(String prompt) async {
@@ -331,6 +399,31 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
 
   Future<void> onDefaultPromptContentSubmitted(Iterable<String> prompts) async {
     await generativeAIService.setDefaultPromptContent(prompts);
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> onPersonaStatementSubmitted(String personaStatement) async {
+    isGeneratingPersona = true;
+
+    try {
+      final List<String> persona = await personaService.generatePersonaFromStatement(personaStatement);
+      personaSuggestions.clear();
+      personaSuggestions.addAll(persona);
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (ex) {
+      await systemService.showErrorToast('Failed to generate persona suggestions, please verify AI settings and try again.');
+    } finally {
+      isGeneratingPersona = false;
+    }
+  }
+
+  Future<void> onPersonaSuggestionSelected(String suggestion) async {
+    personaTextController.text = suggestion;
+    personaSuggestions.clear();
     if (mounted) {
       setState(() {});
     }
@@ -356,10 +449,14 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
         title = 'AI';
         break;
       case 2:
+        icon = SimpleIcons.personio;
+        title = 'Persona Generator';
+        break;
+      case 3:
         icon = SimpleIcons.redis;
         title = 'Redis';
         break;
-      case 3:
+      case 4:
         icon = YaruIcons.settings;
         title = 'Settings';
         break;
@@ -450,8 +547,8 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
           defaultPromptGuidance: generativeAIService.defaultPromptGuidance,
           allPromptContent: generativeAIService.allPromptContent,
           defaultPromptContent: generativeAIService.defaultPromptContent,
-          promptGuidanceController: promptGuidanceController,
-          promptContentController: promptContentController,
+          openAiPromptGuidanceController: openAiPromptGuidanceController,
+          openAiPromptContentController: openAiPromptContentController,
           onDefaultPromptContentSubmitted: onDefaultPromptContentSubmitted,
           onDefaultPromptGuidanceSubmitted: onDefaultPromptGuidanceSubmitted,
           onNewPromptContentSubmitted: onPromptContentSubmitted,
@@ -460,16 +557,26 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
           onRemovePromptGuidanceRequested: onRemovePromptGuidanceRequested,
           parentalPaddingApplied: parentalPaddingApplied,
         ),
-      2 => Container(),
-      3 => HomeSettingsPage(
+      2 => HomePersonaPage(
+          personaTextController: personaTextController,
+          personaSuggestions: personaSuggestions,
+          onPersonaStatementSubmitted: onPersonaStatementSubmitted,
+          onPersonaSuggestionSelected: onPersonaSuggestionSelected,
+          isLoadingSuggestions: isGeneratingPersona,
+        ),
+      3 => Container(),
+      4 => HomeSettingsPage(
           whatApiToken: whatsappService.clientToken,
           openaiApiToken: generativeAIService.apiKey,
+          openAiLangchainServerTextController: openAiLangchainServerTextController,
+          openAiLangchainServerUrl: generativeAIService.langchainServerUrl,
+          onOpenAiLangchainServerUrlSubmitted: generativeAIService.setLangchainServerUrl,
           defaultModel: generativeAIService.defaultModel,
           whapiApiTokenTextController: whapiApiTokenTextController,
           onWhapiApiTokenSubmitted: onWhatsAppTokenSubmitted,
           whatsappIntervalTextController: whatsappIntervalTextController,
-          openaiApiTokenTextController: openaiApiTokenTextController,
-          onOpenaiApiTokenSubmitted: onOpenaiApiTokenSubmitted,
+          openAiTokenTextController: openAiTokenTextController,
+          onOpenAiTokenSubmitted: onOpenaiApiTokenSubmitted,
           onWhatsappIntervalSubmitted: onWhatsAppIntervalSubmitted,
           onModelChangeRequested: onModelChangeRequested,
           onThemeChangeRequested: onThemeChangeRequested,
@@ -482,6 +589,10 @@ class HomeViewState extends State<HomeView> with AppServicesMixin {
           whatsappTypingTime: whatsappService.typingTime,
           whatsappTypingTimeTextController: whatsappTypingTimeTextController,
           parentalPaddingApplied: parentalPaddingApplied,
+          onRedisAddressChanged: onRedisConnectionAddressUpdated,
+          onRedisPortChanged: onRedisConnectionPortUpdated,
+          redisAddressTextController: redisAddressTextController,
+          redisPortTextController: redisPortTextController,
         ),
       _ => const SizedBox.shrink(),
     };

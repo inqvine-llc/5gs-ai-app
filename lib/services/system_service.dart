@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:whatsapp_ai/events/theme_updated_event.dart';
+import 'package:whatsapp_ai/events/events.dart';
 import 'package:whatsapp_ai/extensions/yaru_extensions.dart';
 import 'package:whatsapp_ai/main.dart';
 import 'package:yaru/yaru.dart';
